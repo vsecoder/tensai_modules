@@ -33,6 +33,7 @@ from tensai.loader import Module
 from tensai.utils.entity import escape_html
 from tensai.utils.topics import TopicRegistry
 
+__version__ = "1.0.0"
 logger = logging.getLogger(__name__)
 
 URL_RE = re.compile(r"(https?://\S+)")
