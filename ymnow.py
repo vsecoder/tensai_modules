@@ -14,13 +14,13 @@ from typing import Any, Iterable
 
 import aiohttp
 from aiogram import types
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 from yandex_music import ClientAsync  # type: ignore
 
 import tensai
 from tensai import types as tensai_types
-from tensai.decorators import callback_query, command, inline_command
+from tensai.decorators import inline_command
 from tensai.loader import Module
+from tensai.utils.keyboard import Button, Url
 from tensai.utils.entity import escape_html
 
 YNISON_REDIRECTOR_URL = (
@@ -213,8 +213,8 @@ class Ymnow(Module):
             "no_track": "🚫 Сейчас ничего не играет",
             "error": "⚠️ Ошибка при получении трека: {error}",
             "no_token": (
-                "🔑 Токен Яндекс.Музыки не установлен. Используйте "
-                "<code>ymsettoken token</code>\n"
+                "🔑 Токен Яндекс.Музыки не установлен. Задайте его в "
+                "<code>config</code> → ymnow → token\n"
                 "Instructions: https://github.com/MarshalX/yandex-music-api/discussions/513#discussioncomment-2729781"
             ),
             "no_query": "Введите запрос после <code>ym</code>.",
@@ -229,13 +229,6 @@ class Ymnow(Module):
             "lyrics_failed": "⚠️ Не удалось получить текст",
             "like_failed": "⚠️ Не удалось поставить лайк",
             "dislike_failed": "⚠️ Не удалось поставить дизлайк",
-            "token_saved": "✅ Токен Яндекс.Музыки успешно сохранён",
-            "token_invalid": "❌ Неверный токен. Попробуйте ещё раз",
-            "token_cleared": "🗑 Токен Яндекс.Музыки удалён",
-            "token_exists": (
-                "ℹ️ Токен уже установлен. Чтобы удалить, отправьте "
-                "<code>ymsettoken clear</code>"
-            ),
         },
         "en": {
             "loading": "<b>Loading...</b>",
@@ -247,7 +240,8 @@ class Ymnow(Module):
             "no_track": "🚫 Nothing is playing now",
             "error": "⚠️ Error getting track: {error}",
             "no_token": (
-                "🔑 Yandex.Music token is not set. Use <code>ymsettoken token</code>\n"
+                "🔑 Yandex.Music token is not set. Set it via "
+                "<code>config</code> → ymnow → token\n"
                 "Instructions: https://github.com/MarshalX/yandex-music-api/discussions/513#discussioncomment-2729781"
             ),
             "no_query": "Type a query after <code>ym</code>.",
@@ -262,13 +256,6 @@ class Ymnow(Module):
             "lyrics_failed": "⚠️ Failed to get lyrics",
             "like_failed": "⚠️ Failed to like",
             "dislike_failed": "⚠️ Failed to dislike",
-            "token_saved": "✅ Yandex.Music token saved successfully",
-            "token_invalid": "❌ Invalid token. Please try again",
-            "token_cleared": "🗑 Yandex.Music token cleared",
-            "token_exists": (
-                "ℹ️ Token is already set. To remove it, send "
-                "<code>ymsettoken clear</code>"
-            ),
         },
     }
 
@@ -509,178 +496,33 @@ class Ymnow(Module):
         elif state == "dislike":
             dislike_text = f"{dislike_text} ✅"
         row = [
-            types.InlineKeyboardButton(
-                text=like_text,
-                callback_data=f"ym:like:{track_id}",
-            ),
-            types.InlineKeyboardButton(
-                text=dislike_text,
-                callback_data=f"ym:dislike:{track_id}",
-            ),
+            Button(like_text, on_click=self._make_ym_click("like", track_id)),
+            Button(dislike_text, on_click=self._make_ym_click("dislike", track_id)),
         ]
         if has_lyrics:
             row.append(
-                types.InlineKeyboardButton(
-                    text=self.strings("lyrics"),
-                    callback_data=f"ym:lyrics:{track_id}",
+                Button(
+                    self.strings("lyrics"),
+                    on_click=self._make_ym_click("lyrics", track_id),
                 )
             )
-        keyboard = [row]
-        media_row = []
+        keyboard: list[list[Button | Url]] = [row]
+        media_row: list[Button | Url] = []
         if poster_url:
-            media_row.append(types.InlineKeyboardButton(text="🖼", url=poster_url))
+            media_row.append(Url("🖼", poster_url))
         if video_url:
-            media_row.append(types.InlineKeyboardButton(text="🎬", url=video_url))
+            media_row.append(Url("🎬", video_url))
         if media_row:
             keyboard.append(media_row)
-        return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+        return self.keyboard(keyboard)
 
-    @command(aliases=["ymnow", "ynow"])
-    async def _cmd_ymnow(self, message: types.Message) -> None:
-        """
-        - Get current track from Yandex.Music
-        """
-        token = self._get_token()
-        if not token:
-            await self.answer(message, self.strings("no_token"))
-            return
+    def _make_ym_click(self, action: str, track_id: str | int):
+        """on_click factory — action/track are baked into the closure."""
 
-        status = await self.answer(message, self.strings("loading"))
-        client = ClientAsync(token)
-        try:
-            await client.init()
-            result = await get_current_track(client, token)
-        finally:
-            try:
-                await client.close()
-            except Exception:
-                pass
+        async def _click(_module, callback: types.CallbackQuery) -> None:
+            await self._ym_action(callback, action, str(track_id))
 
-        if not result.get("success"):
-            error = result.get("error") or "Unknown"
-            if error == "No token":
-                await status.edit_text(self.strings("no_token"))
-            elif error == "No track playing":
-                await status.edit_text(self.strings("no_track"))
-            else:
-                await status.edit_text(self.strings("error").format(error=error))
-            return
-
-        track = result["track"][0]
-        title = escape_html(track["title"])
-        artists = escape_html(
-            ", ".join([artist["name"] for artist in track["artists"]])
-        )
-        duration = self._format_duration(int(track["duration_ms"]))
-        url = result["info"][0]["direct_link"]
-        cover = getattr(track, "cover_uri", None)
-        og_image = getattr(track, "og_image", None)
-        thumb_url = self._media_url(cover, "100x100") or self._media_url(
-            og_image, "100x100"
-        )
-        background = getattr(track, "background_video_uri", None)
-        video_url = self._media_url(background, 360)
-        has_lyrics = self._has_lyrics(track)
-        filename = (
-            result["info"][0].get("filename")
-            if isinstance(result["info"][0], dict)
-            else getattr(result["info"][0], "filename", None)
-        )
-        self.mdb.set(
-            "last_track",
-            {
-                "id": track["id"],
-                "title": track["title"],
-                "artists": artists,
-                "og_image": og_image,
-                "cover_uri": cover,
-                "background_video_uri": background,
-                "has_lyrics": has_lyrics,
-                "filename": filename,
-            },
-        )
-
-        keyboard = None
-        if self.config.get("show_link") or video_url:
-            keyboard = InlineKeyboardBuilder()
-            if self.config.get("show_link"):
-                keyboard.row(
-                    types.InlineKeyboardButton(
-                        text="song.link",
-                        url=f"https://song.link/ya/{track['id']}",
-                    )
-                )
-            if video_url:
-                keyboard.row(types.InlineKeyboardButton(text="🎬", url=video_url))
-
-        await status.edit_media(
-            media=types.InputMediaAudio(
-                media=url,
-                title=title,
-                performer=artists,
-                thumbnail=types.URLInputFile(thumb_url) if thumb_url else None,
-                caption=self.strings("now_playing").format(
-                    artists=artists,
-                    title=title,
-                    duration=duration,
-                ),
-            ),
-            reply_markup=keyboard.as_markup() if keyboard else None,
-        )
-        await self._send_now_playing_media(message, cover, og_image, video_url)
-
-    async def _send_now_playing_media(
-        self,
-        message: types.Message,
-        cover: str | None,
-        og_image: str | None,
-        video_url: str | None,
-    ) -> None:
-        poster = self._media_url(cover, "256x256") or self._media_url(
-            og_image, "256x256"
-        )
-        if poster:
-            try:
-                await message.answer_photo(poster)
-            except Exception:
-                pass
-        if video_url:
-            try:
-                await message.answer_video(video_url)
-            except Exception:
-                pass
-
-    @command(aliases=["ymsettoken"])
-    async def _cmd_ymsettoken(self, message: types.Message) -> None:
-        """
-        <token | clear> - Set Yandex.Music token
-        """
-        args = self.get_args(message, raw=True)
-        token = args.strip() if isinstance(args, str) else ""
-
-        if not token:
-            if self._get_token():
-                await self.answer(message, self.strings("token_exists"))
-            else:
-                await self.answer(message, self.strings("no_token"))
-            return
-
-        if token.lower() == "clear":
-            self.config.set("token", "")
-            await self.answer(message, self.strings("token_cleared"))
-            return
-
-        try:
-            client = ClientAsync(token)
-            await client.init()
-            try:
-                await client.close()
-            except Exception:
-                pass
-            self.config.set("token", token)
-            await self.answer(message, self.strings("token_saved"))
-        except Exception:
-            await self.answer(message, self.strings("token_invalid"))
+        return _click
 
     @inline_command(
         aliases=["ym", "ymnow", "ymchart"],
@@ -881,26 +723,12 @@ class Ymnow(Module):
             inline_cache_time=0,
         )
 
-    @callback_query(
-        data=lambda value: (
-            isinstance(value, str)
-            and (
-                value.startswith("ym:like:")
-                or value.startswith("ym:dislike:")
-                or value.startswith("ym:lyrics:")
-            )
-        )
-    )
-    async def _cb_ym_action(self, callback: types.CallbackQuery):
+    async def _ym_action(
+        self, callback: types.CallbackQuery, action: str, track_id: str
+    ):
         token = self._get_token()
         if not token:
             return await callback.answer(self.strings("no_token"), show_alert=True)
-
-        data = callback.data or ""
-        parts = data.split(":", 2)
-        if len(parts) != 3:
-            return await callback.answer(self.strings("error"), show_alert=True)
-        action, track_id = parts[1], parts[2]
 
         client = ClientAsync(token)
         try:
