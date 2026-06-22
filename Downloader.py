@@ -1,7 +1,6 @@
-# This file is a test module for Tensai userbot.
-
-# description: media downloader (youtube/instagram/etc)
+# description: Media downloader — YouTube, Instagram, TikTok, etc.
 # author: @vsecoder
+# version: 1.1.0
 # requires: yt-dlp,aiohttp
 #
 # System dependency: **ffmpeg** must be on PATH. yt-dlp merges
@@ -14,6 +13,7 @@
 import asyncio
 import hashlib
 import logging
+import mimetypes
 import os
 import re
 import time
@@ -30,10 +30,12 @@ from yt_dlp import YoutubeDL
 from tensai import types as tensai_types
 from tensai.decorators import command, inline_command
 from tensai.loader import Module
+from tensai.utils.keyboard import Url
 from tensai.utils.entity import escape_html
 from tensai.utils.topics import TopicRegistry
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
+
 logger = logging.getLogger(__name__)
 
 URL_RE = re.compile(r"(https?://\S+)")
@@ -432,16 +434,7 @@ class Downloader(Module):
     def _build_url_markup(self, url: str | None):
         if not url:
             return None
-        return types.InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    types.InlineKeyboardButton(
-                        text=self.strings("open_url"),
-                        url=url,
-                    )
-                ]
-            ]
-        )
+        return self.keyboard([[Url(self.strings("open_url"), url)]])
 
     def _inl_article(
         self,
@@ -925,10 +918,38 @@ class Downloader(Module):
         progress: ProgressState | None = None,
     ) -> tuple[Path, int | None]:
         filename = url.split("?")[0].rstrip("/").split("/")[-1] or "file"
-        target = self.download_dir / filename
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 response.raise_for_status()
+
+                ctype = (
+                    (response.headers.get("Content-Type") or "")
+                    .split(";")[0]
+                    .strip()
+                    .lower()
+                )
+                # This fallback is for *direct file* links only. A page
+                # URL whose yt-dlp probe failed (Instagram without
+                # cookies, rate-limited YouTube, ...) lands here too —
+                # downloading its HTML and shipping it as an
+                # extensionless "file" is never what the user wanted.
+                if ctype in ("text/html", "application/xhtml+xml"):
+                    raise RuntimeError(
+                        f"{url} returned a web page, not a file "
+                        "(yt-dlp probe failed — for Instagram try "
+                        "setting cookies_file/cookies_from_browser in config)"
+                    )
+
+                # CDN links often have no extension in the path
+                # (".../v/t50.2886-16/AbCdEf"); Telegram then renders
+                # the upload as a plain file. Derive the extension from
+                # the Content-Type so videos arrive as videos.
+                if "." not in filename and ctype:
+                    ext = mimetypes.guess_extension(ctype)
+                    if ext:
+                        filename += ext
+
+                target = self.download_dir / filename
                 total = int(response.headers.get("Content-Length", 0) or 0)
                 size = 0
                 start = time.monotonic()

@@ -1,10 +1,12 @@
-# This file is a test module for Tensai userbot.
-
-# description: Module for yandex music.
+# description: Yandex Music — now playing, charts, inline search
 # author: @vsecoder
+# version: 1.1.0
 # requires: yandex-music
 
 from __future__ import annotations
+
+__version__ = "1.1.0"
+
 
 import asyncio
 import json
@@ -208,12 +210,12 @@ class Ymnow(Module):
             "now_playing": (
                 "<b>🎶 Сейчас играет:</b>\n"
                 "<code>{artists}</code> - <code>{title}</code>\n"
-                "🕐 <code>{duration}</code>"
+                ":e:clock <code>{duration}</code>"
             ),
-            "no_track": "🚫 Сейчас ничего не играет",
-            "error": "⚠️ Ошибка при получении трека: {error}",
+            "no_track": ":e:cross Сейчас ничего не играет",
+            "error": ":e:alert Ошибка при получении трека: {error}",
             "no_token": (
-                "🔑 Токен Яндекс.Музыки не установлен. Задайте его в "
+                ":e:key Токен Яндекс.Музыки не установлен. Задайте его в "
                 "<code>config</code> → ymnow → token\n"
                 "Instructions: https://github.com/MarshalX/yandex-music-api/discussions/513#discussioncomment-2729781"
             ),
@@ -226,21 +228,21 @@ class Ymnow(Module):
             "search": "🔎 Поиск: {query}",
             "liked": "👍 Лайк поставлен",
             "disliked": "👎 Дизлайк поставлен",
-            "lyrics_failed": "⚠️ Не удалось получить текст",
-            "like_failed": "⚠️ Не удалось поставить лайк",
-            "dislike_failed": "⚠️ Не удалось поставить дизлайк",
+            "lyrics_failed": ":e:alert Не удалось получить текст",
+            "like_failed": ":e:alert Не удалось поставить лайк",
+            "dislike_failed": ":e:alert Не удалось поставить дизлайк",
         },
         "en": {
             "loading": "<b>Loading...</b>",
             "now_playing": (
                 "<b>🎶 Now playing:</b>\n"
                 "<code>{artists}</code> - <code>{title}</code>\n"
-                "🕐 <code>{duration}</code>"
+                ":e:clock <code>{duration}</code>"
             ),
-            "no_track": "🚫 Nothing is playing now",
-            "error": "⚠️ Error getting track: {error}",
+            "no_track": ":e:cross Nothing is playing now",
+            "error": ":e:alert Error getting track: {error}",
             "no_token": (
-                "🔑 Yandex.Music token is not set. Set it via "
+                ":e:key Yandex.Music token is not set. Set it via "
                 "<code>config</code> → ymnow → token\n"
                 "Instructions: https://github.com/MarshalX/yandex-music-api/discussions/513#discussioncomment-2729781"
             ),
@@ -253,9 +255,9 @@ class Ymnow(Module):
             "search": "🔎 Search: {query}",
             "liked": "👍 Liked",
             "disliked": "👎 Disliked",
-            "lyrics_failed": "⚠️ Failed to get lyrics",
-            "like_failed": "⚠️ Failed to like",
-            "dislike_failed": "⚠️ Failed to dislike",
+            "lyrics_failed": ":e:alert Failed to get lyrics",
+            "like_failed": ":e:alert Failed to like",
+            "dislike_failed": ":e:alert Failed to dislike",
         },
     }
 

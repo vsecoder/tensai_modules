@@ -1,9 +1,11 @@
-# This file is a test module for Tensai userbot.
-
-# description: selflog module — caches edits/deletes/self-destructs into the Selflog topic
+# description: Self-log — caches edits/deletes/self-destructs into the Selflog topic
 # author: @vsecoder
+# version: 1.1.0
 
 from __future__ import annotations
+
+__version__ = "1.1.0"
+
 
 import asyncio
 import datetime as _dt
@@ -25,6 +27,7 @@ from tensai.decorators import (
     edited_business_message,
 )
 from tensai.loader import Module
+from tensai.utils.keyboard import Url
 from tensai.utils.topics import TopicRegistry
 
 logger = logging.getLogger(__name__)
@@ -344,16 +347,14 @@ class Selflog(Module):
             copy_kwargs["message_thread_id"] = topic_id
         await original_message.send_copy(
             **copy_kwargs,
-            reply_markup=types.InlineKeyboardMarkup(
-                inline_keyboard=[
+            reply_markup=self.keyboard(
+                [
                     [
-                        types.InlineKeyboardButton(
-                            text=self.strings("open"),
-                            url=(
-                                "tg://openmessage?"
-                                f"user_id={user_fields['user_id']}"
-                                f"&message_id={original_message.message_id}"
-                            ),
+                        Url(
+                            self.strings("open"),
+                            "tg://openmessage?"
+                            f"user_id={user_fields['user_id']}"
+                            f"&message_id={original_message.message_id}",
                         )
                     ]
                 ]
